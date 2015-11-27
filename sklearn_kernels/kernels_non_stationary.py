@@ -6,7 +6,8 @@ from scipy.special import gamma, kv
 
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.gaussian_process.kernels import Kernel, _approx_fprime
+from sklearn.gaussian_process.kernels \
+    import Kernel, _approx_fprime, Hyperparameter
 
 
 class ManifoldKernel(Kernel):
@@ -53,53 +54,53 @@ class ManifoldKernel(Kernel):
     http://arxiv.org/abs/1402.5876
     """
 
-    def __init__(self, base_kernel, architecture, transfer_fct="tanh",
-                 max_nn_weight=5.0):
+    def __init__(self, w, w_bounds, base_kernel, architecture, theta_nn_size,
+                 transfer_fct="tanh", max_nn_weight=5.0):
+        self.w = w
+        self.w_bounds = w_bounds
         self.base_kernel = base_kernel
-
         self.architecture = architecture
+        self.theta_nn_size = theta_nn_size
         self.transfer_fct = transfer_fct
         self.max_nn_weight = max_nn_weight
 
-        n_outputs, self.theta_nn_size = determine_network_layout(architecture)
+        self.hyperparameter_w = \
+                Hyperparameter("w", "numeric", self.w_bounds,
+                               self.w.shape[0])
 
-        theta0 = \
-            list(np.random.uniform(-max_nn_weight, max_nn_weight,
-                                   self.theta_nn_size)) \
-                + list(self.base_kernel.theta)
-        thetaL = [-max_nn_weight] * self.theta_nn_size \
-            + list(self.base_kernel.bounds[:, 0])
-        thetaU = [max_nn_weight] * self.theta_nn_size \
-            + list(self.base_kernel.bounds[:, 1])
+    @classmethod
+    def construct(cls, base_kernel, architecture, transfer_fct="tanh",
+                  max_nn_weight=5.0):
+        n_outputs, theta_nn_size = determine_network_layout(architecture)
 
-        self.params = np.array(theta0)
-        self.params_bounds = np.vstack((thetaL, thetaU)).T
-
-        self.theta_vars = [("params", len(self.params))]
+        w = np.array(list(np.random.uniform(-max_nn_weight, max_nn_weight,
+                                            theta_nn_size))
+                     + list(base_kernel.theta))
+        wL = [-max_nn_weight] * theta_nn_size \
+            + list(base_kernel.bounds[:, 0])
+        wU = [max_nn_weight] * theta_nn_size \
+            + list(base_kernel.bounds[:, 1])
+        w_bounds = np.vstack((wL, wU)).T
+        return cls(w, w_bounds, base_kernel=base_kernel,
+                   architecture=architecture, theta_nn_size=theta_nn_size,
+                   transfer_fct=transfer_fct, max_nn_weight=max_nn_weight)
 
     @property
     def theta(self):
-        return self.params
+        return self.w
 
     @theta.setter
     def theta(self, theta):
-        self.params = np.asarray(theta, dtype=np.float)
+        self.w = np.asarray(theta, dtype=np.float)
         self.base_kernel.theta = theta[self.theta_nn_size:]
-        #if self.theta.ndim == 2:
-        #    self.theta = self.theta[:, 0]
-
-        ## XXX:
-        #if np.any(self.theta == 0):
-        #    self.theta[np.where(self.theta == 0)] \
-        #        += np.random.random((self.theta == 0).sum()) * 2e-5 - 1e-5
 
     @property
     def bounds(self):
-        return self.params_bounds
+        return self.w_bounds
 
     @bounds.setter
     def bounds(self, bounds):
-        1 / 0
+        self.w_bounds = bounds
 
     def __call__(self, X, Y=None, eval_gradient=False):
         X_nn = self._project_manifold(X)
@@ -112,12 +113,8 @@ class ManifoldKernel(Kernel):
                 # XXX: Analytic expression for gradient based on chain rule and
                 #      backpropagation?
                 def f(theta):  # helper function
-                    # return self.clone_with_theta(theta)(X, Y)
-                    import copy  # XXX: Avoid deepcopy
-                    kernel = copy.deepcopy(self)
-                    kernel.theta = theta
-                    return kernel(X)
-                return K, _approx_fprime(self.theta, f, 1e-10)
+                    return self.clone_with_theta(theta)(X, Y)
+                return K, _approx_fprime(self.theta, f, 1e-5)
         else:
             if eval_gradient:
                 raise ValueError(
@@ -125,7 +122,30 @@ class ManifoldKernel(Kernel):
             Y_nn = self._project_manifold(Y)
             return self.base_kernel(X_nn, Y_nn)
 
-    def _project_manifold(self, X, theta=None):
+    def diag(self, X):
+        """Returns the diagonal of the kernel k(X, X).
+
+        The result of this method is identical to np.diag(self(X)); however,
+        it can be evaluated more efficiently since only the diagonal is
+        evaluated.
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Returns
+        -------
+        K_diag : array, shape (n_samples_X,)
+            Diagonal of kernel k(X, X)
+        """
+        return np.diag(self(X)) # XXX
+
+    def is_stationary(self):
+        """Returns whether the kernel is stationary. """
+        return False
+
+    def _project_manifold(self, X, w=None):
         # Lazily fetch transfer function (to keep object pickable)
         if self.transfer_fct == "tanh":
             transfer_fct = np.tanh
@@ -138,22 +158,22 @@ class ManifoldKernel(Kernel):
         elif hasattr(self.transfer_fct, "__call__"):
             transfer_fct = self.transfer_fct
 
-        if theta is None:
-            theta = self.theta
+        if w is None:
+            w = self.w
 
         y = []
         for subnet in self.architecture:
             y.append(X[:, :subnet[0]])
             for layer in range(len(subnet) - 1):
-                W = theta[:subnet[layer]*subnet[layer+1]]
+                W = w[:subnet[layer]*subnet[layer+1]]
                 W = W.reshape((subnet[layer], subnet[layer+1]))
-                b = theta[subnet[layer]*subnet[layer+1]:
-                                 (subnet[layer]+1)*subnet[layer+1]]
+                b = w[subnet[layer]*subnet[layer+1]:
+                      (subnet[layer]+1)*subnet[layer+1]]
                 a = y[-1].dot(W) + b
                 y[-1] = transfer_fct(a)
 
                 # chop off weights of this layer
-                theta = theta[(subnet[layer]+1)*subnet[layer+1]:]
+                w = w[(subnet[layer]+1)*subnet[layer+1]:]
 
             X = X[:, subnet[0]:]  # chop off used input dimensions
 
