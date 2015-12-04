@@ -2,21 +2,22 @@
 #
 # License: BSD 3 clause
 """
-==============================================================================
-Illustration how ManifoldKernel can exploit data on lower-dimensional manifold
-==============================================================================
+==============================================================
+Illustration how HeteroscedasticKernel can learn a noise model
+==============================================================
 
-This example illustrates how the ManifoldKernel allows exploiting when the
-function to be learned has a lower effective input dimensionality (2d in the
-example) than the actual observed data (5d in the example). For this, a
-non-linear mapping (represented using an MLP) from data space onto
-manifold is learned. A stationary GP is used to learn the function on this
-manifold.
+A heteroscedastic kernel allows adapting to situations where different regions
+in the data space exhibit different noise levels. For this, the kernel learns
+for a set of prototypes values from the data space explicit noise levels.
+These exemplary noise levels are then generalized to the entire data space by
+means for kernel regression.
 
-In the example, the ManifoldKernel is able to nearly perfectly recover the
-original square 2d structure of the function input space and correspondingly
-learns to model the target function better than a stationary, anisotropic GP
-in the 5d data space.
+In the shown example, a homoscedastic and heteroscedastic noise kernel are
+compared. The function to be learned is a simple linear relationship; however,
+the noise level grows quadratically with the input. Both kernels allow
+capturing the mean equally well; however, the heteroscedastic kernel can
+considerably better explain the observed data (according to the log-marginal
+likelihood LML) and provide better noise estimates.
 """
 print __doc__
 
@@ -27,80 +28,73 @@ import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels \
     import RBF, WhiteKernel, ConstantKernel as C
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import learning_curve
+from sklearn.cluster import KMeans
 
-from gp_extras.kernels import ManifoldKernel
+from gp_extras.kernels import HeteroscedasticKernel
 
 np.random.seed(0)
 
-n_samples = 100
-n_features = 5
-n_dim_manifold = 2
-n_hidden = 3
-
 # Generate data
-def f(X_nn):  # target function
-    return np.sqrt(np.abs(X_nn[:, 0] * X_nn[:, 1]))
+n_samples = 100
+def f(X):
+    # target function is just a linear relationship + heteroscadastic noise
+    return X + 0.5*np.random.multivariate_normal(np.zeros(X.shape[0]),
+                                                 np.diag(X**2), 1)[0]
 
-X_ = np.random.uniform(-5, 5, (n_samples, n_dim_manifold))  # data on manifold
-A = np.random.random((n_dim_manifold, n_features))  # mapping from manifold to data space
-X = X_.dot(A)  # X are the observed values
-y = f(X_)  # Generate target values by applying function to manifold
+X = np.random.uniform(-7.5, 7.5, n_samples)  # input data
+y = f(X)  # Generate target values by applying function to manifold
 
-# Gaussian Process with anisotropic RBF kernel
-kernel = C(1.0, (1e-10, 100)) * RBF([1] * n_features,
-                                    [(0.1, 100.0)] * n_features) \
-    + WhiteKernel(1e-3, (1e-10, 1e-1))
-gp = GaussianProcessRegressor(kernel=kernel, alpha=0,
-                              n_restarts_optimizer=3)
+# Gaussian Process with RBF kernel and homoscedastic noise level
+kernel_homo = C(1.0, (1e-10, 1000)) * RBF(1, (0.01, 100.0)) \
+    + WhiteKernel(1e-3, (1e-10, 50.0))
+gp_homoscedastic = GaussianProcessRegressor(kernel=kernel_homo, alpha=0)
+gp_homoscedastic.fit(X[:, np.newaxis], y)
+print "Homoscedastic kernel: %s" % gp_homoscedastic.kernel_
+print "Homoscedastic LML: %.3f" \
+    % gp_homoscedastic.log_marginal_likelihood(gp_homoscedastic.kernel_.theta)
+print
 
-# Gaussian Process with Manifold kernel (using an isotropic RBF kernel on
-# manifold for learning the target function)
-# Use an MLP with one hidden-layer for the mapping from data space to manifold
-architecture=((n_features, n_hidden, n_dim_manifold),)
-kernel_nn = C(1.0, (1e-10, 100)) \
-    * ManifoldKernel.construct(base_kernel=RBF(0.1, (1.0, 100.0)),
-                               architecture=architecture,
-                               transfer_fct="tanh", max_nn_weight=1.0) \
-    + WhiteKernel(1e-3, (1e-10, 1e-1))
-gp_nn = GaussianProcessRegressor(kernel=kernel_nn, alpha=0,
-                                 n_restarts_optimizer=3)
+# Gaussian Process with RBF kernel and heteroscedastic noise level
+prototypes = KMeans(n_clusters=10).fit(X[:, np.newaxis]).cluster_centers_
+kernel_hetero = C(1.0, (1e-10, 1000)) * RBF(1, (0.01, 100.0)) \
+    + HeteroscedasticKernel.construct(prototypes, 1e-3, (1e-10, 50.0),
+                                      gamma=5.0, gamma_bounds="fixed")
+gp_heteroscedastic = GaussianProcessRegressor(kernel=kernel_hetero, alpha=0)
+gp_heteroscedastic.fit(X[:, np.newaxis], y)
+print "Heteroscedastic kernel: %s" % gp_heteroscedastic.kernel_
+print "Heteroscedastic LML: %.3f" \
+    % gp_heteroscedastic.log_marginal_likelihood(gp_heteroscedastic.kernel_.theta)
 
-# Fit GPs and create scatter plot on test data
-gp.fit(X, y)
-gp_nn.fit(X, y)
 
-print "Initial kernel: %s" % gp_nn.kernel
-print "Log-marginal-likelihood: %s" \
-    % gp_nn.log_marginal_likelihood(gp_nn.kernel.theta)
+# Plot result
+X_ = np.linspace(-7.5, 7.5, 100)
+y_ = X_
+noise_std = 0.5 * X_
 
-print "Learned kernel: %s" % gp_nn.kernel_
-print "Log-marginal-likelihood: %s" \
-    % gp_nn.log_marginal_likelihood(gp_nn.kernel_.theta)
+plt.subplot(1, 2, 1)
+plt.scatter(X, y)
+plt.plot(X_, y_, 'b', label="true function")
+plt.fill_between(X_, y_ - noise_std, y_ + noise_std,
+                 alpha=0.5, color='b')
+y_mean, y_std = gp_homoscedastic.predict(X_[:, None], return_std=True)
+plt.plot(X_, y_mean, 'k', lw=3, zorder=9, label="predicted mean")
+plt.fill_between(X_, y_mean - y_std, y_mean + y_std,
+                 alpha=0.5, color='k')
+plt.xlim(-7.5, 7.5)
+plt.legend(loc="best")
+plt.title("Homoscedastic noise model")
 
-X_test_ = np.random.uniform(-5, 5, (1000, n_dim_manifold))
-X_nn_test = X_test_.dot(A)
-y_test = f(X_test_)
-plt.figure(0)
-plt.scatter(y_test, gp.predict(X_nn_test), c='b', label="GP RBF")
-plt.scatter(y_test, gp_nn.predict(X_nn_test), c='r', label="GP NN")
-plt.xlabel("True")
-plt.ylabel("Predicted")
-plt.legend(loc=0)
-plt.title("Scatter plot on test data")
-
-print "RMSE of stationary anisotropic kernel: %s" \
-    % mean_squared_error(y_test, gp.predict(X_nn_test))
-print "RMSE of stationary anisotropic kernel: %s" \
-    % mean_squared_error(y_test, gp_nn.predict(X_nn_test))
-
-plt.figure(1)
-X_gp_nn_test = gp_nn.kernel_.k1.k2._project_manifold(X_nn_test)
-plt.scatter(X_gp_nn_test[:, 0], X_gp_nn_test[:, 1], c=y_test)
-cbar = plt.colorbar()
-cbar.ax.set_ylabel('Function value', rotation=270)
-plt.xlabel("Manifold dimension 1")
-plt.ylabel("Manifold dimension 2")
-plt.title("Learned 2D Manifold")
+plt.subplot(1, 2, 2)
+plt.scatter(X, y)
+plt.plot(X_, y_, 'b', label="true function")
+plt.fill_between(X_, y_ - noise_std, y_ + noise_std,
+                 alpha=0.5, color='b')
+y_mean, y_std = gp_heteroscedastic.predict(X_[:, None], return_std=True)
+plt.plot(X_, y_mean, 'k', lw=3, zorder=9, label="predicted mean")
+plt.fill_between(X_, y_mean - y_std, y_mean + y_std,
+                 alpha=0.5, color='k')
+plt.xlim(-7.5, 7.5)
+plt.legend(loc="best")
+plt.title("Heteroscedastic noise model")
 plt.show()
+
