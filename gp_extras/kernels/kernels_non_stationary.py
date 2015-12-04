@@ -414,10 +414,8 @@ class HeteroscedasticKernel(Kernel):
     """
     def __init__(self, prototypes, sigma_2=1.0, sigma_2_bounds=(0.1, 10.0),
                  gamma=1.0, gamma_bounds=(1e-2, 1e2)):
-        assert len(prototypes) == len(sigma_2)
-        self.prototypes = np.asarray(prototypes)
-        self.prototypes_std = self.prototypes.std(0)
-        self.n_prototypes = self.prototypes.shape[0]
+        assert prototypes.shape[0] == sigma_2.shape[0]
+        self.prototypes = prototypes
 
         self.sigma_2 = np.asarray(sigma_2)
         self.sigma_2_bounds = sigma_2_bounds
@@ -425,11 +423,21 @@ class HeteroscedasticKernel(Kernel):
         self.gamma = gamma
         self.gamma_bounds = gamma_bounds
 
-        self.theta_vars = []
-        if sigma_2_bounds is not "fixed":
-            self.theta_vars.append(("sigma_2", self.n_prototypes))
-        if gamma_bounds is not "fixed":
-            self.theta_vars.append("gamma")
+        self.hyperparameter_sigma_2 = \
+                Hyperparameter("sigma_2", "numeric", self.sigma_2_bounds,
+                               self.sigma_2.shape[0])
+
+        self.hyperparameter_gamma = \
+                Hyperparameter("gamma", "numeric", self.gamma_bounds)
+
+    @classmethod
+    def construct(cls, prototypes, sigma_2=1.0, sigma_2_bounds=(0.1, 10.0),
+                  gamma=1.0, gamma_bounds=(1e-2, 1e2)):
+        prototypes = np.asarray(prototypes)
+        if prototypes.shape[0] > 1 and len(np.atleast_1d(sigma_2)) == 1:
+            sigma_2 = np.repeat(sigma_2, prototypes.shape[0])
+            sigma_2_bounds = np.vstack([sigma_2_bounds] *prototypes.shape[0])
+        return cls(prototypes, sigma_2, sigma_2_bounds, gamma, gamma_bounds)
 
     def __call__(self, X, Y=None, eval_gradient=False):
         """Return the kernel k(X, Y) and optionally its gradient.
@@ -457,6 +465,11 @@ class HeteroscedasticKernel(Kernel):
             hyperparameter of the kernel. Only returned when eval_gradient
             is True.
         """
+        prototypes_std = self.prototypes.std(0)
+        n_prototypes = self.prototypes.shape[0]
+        n_gradient_dim = \
+            n_prototypes + (0 if self.hyperparameter_gamma.fixed else 1)
+
         X = np.atleast_2d(X)
         if Y is not None and eval_gradient:
             raise ValueError("Gradient can only be evaluated when Y is None.")
@@ -465,22 +478,34 @@ class HeteroscedasticKernel(Kernel):
             K= np.eye(X.shape[0]) * self.diag(X)
             if eval_gradient:
                 K_gradient = \
-                    np.zeros((K.shape[0], K.shape[0], self.n_prototypes))
+                    np.zeros((K.shape[0], K.shape[0], n_gradient_dim))
                 K_pairwise = \
-                    pairwise_kernels(self.prototypes / self.prototypes_std,
-                                     X / self.prototypes_std,
+                    pairwise_kernels(self.prototypes / prototypes_std,
+                                     X / prototypes_std,
                                      metric="rbf", gamma=self.gamma)
-                for i in range(self.n_prototypes):
+                for i in range(n_prototypes):
                     for j in range(K.shape[0]):
                         K_gradient[j, j, i] = \
                             self.sigma_2[i] * K_pairwise[i, j] \
                             / K_pairwise[:, j].sum()
+                if not self.hyperparameter_gamma.fixed:
+                    # XXX: Analytic expression for gradient?
+                    def f(gamma):  # helper function
+                        theta = self.theta.copy()
+                        theta[-1] = gamma[0]
+                        return self.clone_with_theta(theta)(X, Y)
+                    K_gradient[:, :, -1] = \
+                        _approx_fprime([self.theta[-1]], f, 1e-5)[:, :, 0]
                 return K, K_gradient
             else:
                 return K
         else:
             K = np.zeros((X.shape[0], Y.shape[0]))
             return K   # XXX: similar entries?
+
+    def is_stationary(self):
+        """Returns whether the kernel is stationary. """
+        return False
 
     def diag(self, X):
         """Returns the diagonal of the kernel k(X, X).
@@ -499,10 +524,13 @@ class HeteroscedasticKernel(Kernel):
         K_diag : array, shape (n_samples_X,)
             Diagonal of kernel k(X, X)
         """
+        prototypes_std = self.prototypes.std(0)
+        n_prototypes = self.prototypes.shape[0]
+
         # kernel regression of noise levels
         K_pairwise = \
-            pairwise_kernels(self.prototypes / self.prototypes_std,
-                             X / self.prototypes_std,
+            pairwise_kernels(self.prototypes / prototypes_std,
+                             X / prototypes_std,
                              metric="rbf", gamma=self.gamma)
 
         return (K_pairwise * self.sigma_2[:, None]).sum(axis=0) \
