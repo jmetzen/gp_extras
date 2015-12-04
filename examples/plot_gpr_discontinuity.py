@@ -48,10 +48,9 @@ pylab.xlim(-7.5, 7.5)
 pylab.title("Prior mapping to manifold")
 
 pylab.subplot(3, 2, 2)
-y_mean, y_cov = gp.predict(X_[:, None], return_cov=True)
+y_mean, y_std = gp.predict(X_[:, None], return_std=True)
 pylab.plot(X_, y_mean, 'k', lw=3, zorder=9, label="mean")
-pylab.fill_between(X_, y_mean - np.sqrt(np.diag(y_cov)),
-                   y_mean + np.sqrt(np.diag(y_cov)),
+pylab.fill_between(X_, y_mean - y_std, y_mean + y_std,
                    alpha=0.5, color='k')
 y_samples = gp.sample_y(X_[:, None], 10)
 pylab.plot(X_, y_samples, color='b', lw=1)
@@ -78,10 +77,9 @@ pylab.legend(loc="best")
 pylab.title("Posterior mapping to manifold")
 
 pylab.subplot(3, 2, 4)
-y_mean, y_cov = gp.predict(X_[:, None], return_cov=True)
+y_mean, y_std = gp.predict(X_[:, None], return_std=True)
 pylab.plot(X_, y_mean, 'k', lw=3, zorder=9, label="mean")
-pylab.fill_between(X_, y_mean - np.sqrt(np.diag(y_cov)),
-                   y_mean + np.sqrt(np.diag(y_cov)),
+pylab.fill_between(X_, y_mean - y_std, y_mean + y_std,
                    alpha=0.5, color='k')
 y_samples = gp.sample_y(X_[:, None], 10)
 pylab.plot(X_, y_samples, color='b', lw=1)
@@ -100,10 +98,9 @@ gp_stationary = GaussianProcessRegressor(kernel=kernel, alpha=1e-5,
 gp_stationary.fit(X, y)
 
 pylab.subplot(3, 2, 6)
-y_mean, y_cov = gp_stationary.predict(X_[:, None], return_cov=True)
+y_mean, y_std = gp_stationary.predict(X_[:, None], return_std=True)
 pylab.plot(X_, y_mean, 'k', lw=3, zorder=9, label="mean")
-pylab.fill_between(X_, y_mean - np.sqrt(np.diag(y_cov)),
-                   y_mean + np.sqrt(np.diag(y_cov)),
+pylab.fill_between(X_, y_mean - y_std, y_mean + y_std,
                    alpha=0.5, color='k')
 y_samples = gp_stationary.sample_y(X_[:, None], 10)
 pylab.plot(X_, y_samples, color='b', lw=1)
