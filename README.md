@@ -23,3 +23,58 @@ Now, you can install `kernel_extras`
     cd gp_extras/gp_extras
     sudo python setup.py install
 
+Examples
+--------
+
+### Illustration how the ManifoldKernel can be used to deal with discontinuities
+
+Source: [plot_gpr_discontinuity.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_discontinuity.py)
+
+The ManifoldKernel allows to learn a mapping from low-dimensional input space
+(1d in this case) to a higher-dimensional manifold (2d in this case). Since this
+mapping is non-linear, this can be effectively used for turning a stationary
+base kernel into a non-stationary kernel, where the non-stationarity is
+learned. In this example, this used to learn a function which is sinusoidal but
+with a discontinuity at x=0. Using an adaptable non-stationary kernel allows
+to model uncertainty better and yields a better extrapolation beyond observed
+data in this example.
+
+![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_discontinuity.png)
+
+### Illustration how ManifoldKernel can exploit data on lower-dimensional manifold
+
+Source: [plot_gpr_manifold.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_manifold.py)
+
+This example illustrates how the ManifoldKernel allows exploiting when the
+function to be learned has a lower effective input dimensionality (2d in the
+example) than the actual observed data (5d in the example). For this, a
+non-linear mapping (represented using an MLP) from data space onto
+manifold is learned. A stationary GP is used to learn the function on this
+manifold.
+
+In the example, the ManifoldKernel is able to nearly perfectly recover the
+original square 2d structure of the function input space and correspondingly
+learns to model the target function better than a stationary, anisotropic GP
+in the 5d data space.
+
+![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_manifold.png)
+
+
+### Illustration how HeteroscedasticKernel can learn a noise model
+
+Source: [gpr_heteroscedastic_noise.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_heteroscedastic_noise.py)
+
+A heteroscedastic kernel allows adapting to situations where different regions
+in the data space exhibit different noise levels. For this, the kernel learns
+for a set of prototypes values from the data space explicit noise levels.
+These exemplary noise levels are then generalized to the entire data space by
+means for kernel regression.
+
+In the shown example, a homoscedastic and heteroscedastic noise kernel are
+compared. The function to be learned is a simple linear relationship; however,
+the noise level grows quadratically with the input. Both kernels allow
+capturing the mean equally well; however, the heteroscedastic kernel can
+considerably better explain the observed data (according to the log-marginal
+likelihood LML) and provide better noise estimates.
+
+![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_heteroscedastic_noise.png)
