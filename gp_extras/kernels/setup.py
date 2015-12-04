@@ -1,12 +1,11 @@
 def configuration(parent_package="", top_path=None):
     from numpy.distutils.misc_util import Configuration
 
-    config = Configuration("bayesian_optimization", parent_package, top_path)
+    config = Configuration("gp_extras/kernels", parent_package, top_path)
     config.set_options(ignore_setup_xxx_py=True,
                        assume_default_configuration=True,
                        delegate_options_to_subpackages=True,
                        quiet=True)
-    config.add_subpackage("utils")
     return config
 
 if __name__ == "__main__":
