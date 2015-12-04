@@ -27,10 +27,10 @@ import matplotlib.pyplot as plt
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels \
     import RBF, WhiteKernel, ConstantKernel as C
-from sklearn_kernels import ManifoldKernel
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import learning_curve
 
+from gp_extras.kernels import ManifoldKernel
 
 np.random.seed(0)
 

@@ -23,7 +23,7 @@ import pylab
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-from sklearn_kernels import ManifoldKernel
+from gp_extras.kernels import ManifoldKernel
 
 np.random.seed(1)
 
