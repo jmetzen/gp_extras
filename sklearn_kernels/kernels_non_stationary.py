@@ -1,3 +1,7 @@
+# Authors: Jan Hendrik Metzen <janmetzen@mailbox.org>
+#
+# License: BSD 3 clause
+
 """ Non-stationary kernels that can be used with sklearn's GP module. """
 
 import numpy as np

@@ -1,3 +1,6 @@
+# Authors: Jan Hendrik Metzen <janmetzen@mailbox.org>
+#
+# License: BSD 3 clause
 """
 ============================================================================
 Illustration how the ManifoldKernel can be used to deal with discontinuities
