@@ -82,7 +82,8 @@ print "Log-marginal-likelihood: %s" \
 X_test_ = np.random.uniform(-5, 5, (1000, n_dim_manifold))
 X_nn_test = X_test_.dot(A)
 y_test = f(X_test_)
-plt.figure(0)
+plt.figure(figsize=(8, 6))
+plt.subplot(1, 2, 1)
 plt.scatter(y_test, gp.predict(X_nn_test), c='b', label="GP RBF")
 plt.scatter(y_test, gp_nn.predict(X_nn_test), c='r', label="GP NN")
 plt.xlabel("True")
@@ -95,7 +96,7 @@ print "RMSE of stationary anisotropic kernel: %s" \
 print "RMSE of stationary anisotropic kernel: %s" \
     % mean_squared_error(y_test, gp_nn.predict(X_nn_test))
 
-plt.figure(1)
+plt.subplot(1, 2, 2)
 X_gp_nn_test = gp_nn.kernel_.k1.k2._project_manifold(X_nn_test)
 plt.scatter(X_gp_nn_test[:, 0], X_gp_nn_test[:, 1], c=y_test)
 cbar = plt.colorbar()
