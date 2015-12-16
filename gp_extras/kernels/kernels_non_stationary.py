@@ -262,42 +262,52 @@ class LocalLengthScalesKernel(Kernel):
         self.theta_size = \
             self.theta_gp_size + self.theta_l_size + self.l_samples
 
-        theta0 = [theta0] * self.theta_gp_size
-        thetaL = [thetaL] * self.theta_gp_size
-        thetaU = [thetaU] * self.theta_gp_size
+        self.weights = [theta0] * self.theta_gp_size
+        weightsL = [thetaL] * self.theta_gp_size
+        weightsU = [thetaU] * self.theta_gp_size
 
-        theta0 += [theta_l_0] * self.theta_l_size
-        thetaL += [theta_l_L] * self.theta_l_size
-        thetaU += [theta_l_U] * self.theta_l_size
+        self.weights += [theta_l_0] * self.theta_l_size
+        weightsL += [theta_l_L] * self.theta_l_size
+        weightsU += [theta_l_U] * self.theta_l_size
 
-        theta0 += [l_0] * self.l_samples
-        thetaL += [l_L] * self.l_samples
-        thetaU += [l_U] * self.l_samples
+        self.weights += [l_0] * self.l_samples
+        weightsL += [l_L] * self.l_samples
+        weightsU += [l_U] * self.l_samples
 
-        self.params = theta0
-        self.params_bounds = np.vstack((thetaL,  thetaU)).T
+        self.weights_bounds = np.vstack((weightsL, weightsU)).T
+        self.theta = np.log(self.weights)
 
-        self.theta_vars = [("params", len(self.params))]
+        self.hyperparameter_weights = \
+                Hyperparameter("weights", "numeric", self.weights_bounds,
+                               len(self.weights))
 
     @property
     def theta(self):
-        return self.params
+        return np.log(self.weights)
 
     @theta.setter
-    def theta(self, params):
-        from . import GaussianProcessRegressor
-        from .kernels import RBF
+    def theta(self, weights):
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF
 
-        self.params = np.asarray(params, dtype=np.float)
+        self.weights = np.exp(np.asarray(weights, dtype=np.float))
 
-        # Parse theta into its components
+        # Parse weights into its components
         self.theta_gp, self.theta_l, self.length_scales = \
-            self._parse_theta(self.params)
+            self._parse_weights(self.weights)
 
         # Train length-scale Gaussian Process
-        kernel = RBF(self.theta_l)
-        self.gp_l = GaussianProcessRegressor(kernel=kernel, optimizer=None)
+        kernel = RBF(self.theta_l, length_scale_bounds="fixed")
+        self.gp_l = GaussianProcessRegressor(kernel=kernel)
         self.gp_l.fit(self.X_, np.log10(self.length_scales))
+
+    @property
+    def bounds(self):
+        return np.log(self.weights_bounds)
+
+    @bounds.setter
+    def bounds(self, bounds):
+        self.weights_bounds = np.exp(bounds)
 
     def __call__(self, X, Y=None, eval_gradient=False):
         l_train = 10 ** self.gp_l.predict(X)
@@ -343,19 +353,17 @@ class LocalLengthScalesKernel(Kernel):
                 return K
             else:
                 # approximate gradient numerically
+                # XXX: computed gradient analytically?
                 def f(theta):  # helper function
-                    import copy  # XXX: Avoid deepcopy
-                    kernel = copy.deepcopy(self)
-                    kernel.theta = theta
-                    return kernel(X)
-                return K, _approx_fprime(self.params, f, 1e-5)
+                    return self.clone_with_theta(theta)(X, Y)
+                return K, _approx_fprime(self.weights, f, 1e-7)
 
-    def _parse_theta(self, theta):
-        """ Parse parameter vector theta into its components.
+    def _parse_weights(self, weights):
+        """ Parse parameter vector weights into its components.
 
         Parameters
         ----------
-        theta : array_like
+        weights : array_like
             An array containing all hyperparameters.
 
         Returns
@@ -367,24 +375,52 @@ class LocalLengthScalesKernel(Kernel):
         length_scales : array_like
             An array containing the length-scales for the length-scale GP.
         """
-        theta = np.asarray(theta, dtype=np.float)
+        weights = np.asarray(weights, dtype=np.float)
 
-        assert (theta.size == self.theta_size), \
-            "theta does not have the expected size (expected: %d, " \
+        assert (weights.size == self.theta_size), \
+            "weights does not have the expected size (expected: %d, " \
             "actual size %d). Expected: %d entries for main GP, " \
             "%d entries for length-scale GP, %d entries containing the "\
             "length scales, and %d entries for nu." \
-            % (self.theta_size, theta.size, self.theta_gp_size,
+            % (self.theta_size, weights.size, self.theta_gp_size,
                self.theta_l_size, self.l_samples, self.nu_size)
 
         # Split theta in its components
-        theta_gp = theta[:self.theta_gp_size]
+        theta_gp = weights[:self.theta_gp_size]
         theta_l = \
-            theta[self.theta_gp_size:][:self.theta_l_size]
+            weights[self.theta_gp_size:][:self.theta_l_size]
         length_scales = \
-            theta[self.theta_gp_size+self.theta_l_size:][:self.l_samples]
+            weights[self.theta_gp_size+self.theta_l_size:][:self.l_samples]
 
         return theta_gp, theta_l, length_scales
+
+    def diag(self, X):
+        """Returns the diagonal of the kernel k(X, X).
+
+        The result of this method is identical to np.diag(self(X)); however,
+        it can be evaluated more efficiently since only the diagonal is
+        evaluated.
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Returns
+        -------
+        K_diag : array, shape (n_samples_X,)
+            Diagonal of kernel k(X, X)
+        """
+        return np.diag(self(X)) # XXX
+
+    def is_stationary(self):
+        """Returns whether the kernel is stationary. """
+        return False
+
+    def __repr__(self):
+        return "{0}(theta_gp={1}, theta_l={2}, length_scales={3})".format(
+            self.__class__.__name__, self.theta_gp, self.theta_l,
+            self.length_scales)
 
 
 class HeteroscedasticKernel(Kernel):
