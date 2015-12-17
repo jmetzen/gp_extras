@@ -10,8 +10,9 @@ from scipy.special import gamma, kv
 
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels \
-    import Kernel, _approx_fprime, Hyperparameter
+    import Kernel, _approx_fprime, Hyperparameter, RBF
 
 
 class ManifoldKernel(Kernel):
@@ -229,10 +230,11 @@ class LocalLengthScalesKernel(Kernel):
     Smoothness", Christian Plagemann, Kristian Kersting, and Wolfram Burgard,
     ECML 2008
     """
-    def __init__(self, X, nu=1.5,
+    def __init__(self, X_, nu=1.5,
                  isotropic=True, theta0=1e-1, thetaL=1e-3, thetaU=1.0,
                  l_isotropic=True, theta_l_0=1e-1, theta_l_L=1e-3, theta_l_U=1e1,
                  l_samples=10, l_0=1.0, l_L=0.1, l_U=10.0):
+        self.X_ = X_
         self.nu = nu
         self.isotropic = isotropic
         self.theta0 = theta0
@@ -247,18 +249,10 @@ class LocalLengthScalesKernel(Kernel):
         self.l_L = l_L
         self.l_U = l_U
 
-        assert X is not None
-        self.X = np.asarray(X)
-        if X.shape[0] > self.l_samples:
-            kmeans = KMeans(n_clusters=self.l_samples)
-            self.X_ = kmeans.fit(self.X).cluster_centers_
-        else:
-            self.X_ = np.asarray(self.X)
-
         # Determine how many entries in theta belong to the different
         # categories (used later for parsing theta)
-        self.theta_gp_size = 1 if self.isotropic else X.shape[1]
-        self.theta_l_size = 1 if self.l_isotropic else X.shape[1]
+        self.theta_gp_size = 1 if self.isotropic else X_.shape[1]
+        self.theta_l_size = 1 if self.l_isotropic else X_.shape[1]
         self.theta_size = \
             self.theta_gp_size + self.theta_l_size + self.l_samples
 
@@ -281,15 +275,29 @@ class LocalLengthScalesKernel(Kernel):
                 Hyperparameter("weights", "numeric", self.weights_bounds,
                                len(self.weights))
 
+    @classmethod
+    def construct(cls, X, nu=1.5, isotropic=True,
+                  theta0=1e-1, thetaL=1e-3, thetaU=1.0, l_isotropic=True,
+                  theta_l_0=1e-1, theta_l_L=1e-3, theta_l_U=1e1,
+                  l_samples=10, l_0=1.0, l_L=0.1, l_U=10.0):
+        assert X is not None
+        # Select points on which length-scale GP is defined
+        if X.shape[0] > l_samples:
+            kmeans = KMeans(n_clusters=l_samples)
+            X_ = kmeans.fit(X).cluster_centers_
+        else:
+            X_ = np.asarray(X)
+        return cls(X_=X_, nu=nu, isotropic=isotropic, theta0=theta0,
+                   thetaL=thetaL, thetaU=thetaU, l_isotropic=l_isotropic,
+                   theta_l_0=theta_l_0, theta_l_L=theta_l_L, theta_l_U=theta_l_U,
+                   l_samples=l_samples, l_0=l_0, l_L=l_L, l_U=l_U)
+
     @property
     def theta(self):
         return np.log(self.weights)
 
     @theta.setter
     def theta(self, weights):
-        from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import RBF
-
         self.weights = np.exp(np.asarray(weights, dtype=np.float))
 
         # Parse weights into its components
