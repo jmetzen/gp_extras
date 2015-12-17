@@ -59,6 +59,24 @@ in the 5d data space.
 
 ![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_manifold.png)
 
+### Illustration how the LocalLengthScalesKernel can with discontinuities
+Source: [plot_gpr_manifold.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_lls.py)
+
+The LocalLengthScalesKernel allows learning local length scales in the data
+space and thus can identify areas, in which broader and more narrow
+generalization is appropriate. This is illustrated on a simple sinusoidal
+function with a discontinuity at X=0. Because of this discontinuity, a
+stationary Matern kernel is forced to reduce the global length-scale
+considerably. A LocalLengthScalesKernel, on the other hand, needs to reduce
+only the length-scale close to the discontinuity, and achieves a considerably
+larger log-marginal-likelihood accordingly.
+
+The example illustrates also how a custom optimizer based on differential
+evolution can be used for GP hyperparameter-tuning. This is required here
+because the log-marginal-likelihood for the LocalLengthScalesKernel is highly
+multi-modal, which is problematic for gradient-based methods like L-BFGS.
+
+![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_lls.png)
 
 ### Illustration how HeteroscedasticKernel can learn a noise model
 
