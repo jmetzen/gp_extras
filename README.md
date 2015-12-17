@@ -76,6 +76,8 @@ evolution can be used for GP hyperparameter-tuning. This is required here
 because the log-marginal-likelihood for the LocalLengthScalesKernel is highly
 multi-modal, which is problematic for gradient-based methods like L-BFGS.
 
+![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_lls.png)
+
 ### Illustration how HeteroscedasticKernel can learn a noise model
 
 Source: [gpr_heteroscedastic_noise.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_heteroscedastic_noise.py)
