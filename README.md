@@ -60,7 +60,7 @@ in the 5d data space.
 ![alt tag](https://raw.github.com/jmetzen/gp_extras/master/images/gpr_manifold.png)
 
 ### Illustration how the LocalLengthScalesKernel can with discontinuities
-Source: [plot_gpr_manifold.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_lls.py)
+Source: [plot_gpr_lls.py](https://github.com/jmetzen/gp_extras/blob/master/examples/plot_gpr_lls.py)
 
 The LocalLengthScalesKernel allows learning local length scales in the data
 space and thus can identify areas, in which broader and more narrow
