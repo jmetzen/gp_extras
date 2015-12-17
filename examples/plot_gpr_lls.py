@@ -50,7 +50,7 @@ y = f(X)[:, 0]
 # Define custom optimizer for hyperparameter-tuning of non-stationary kernel
 def de_optimizer(obj_func, initial_theta, bounds):
     res = differential_evolution(lambda x: obj_func(x, eval_gradient=False),
-                                 bounds, maxiter=2, disp=False, polish=False)
+                                 bounds, maxiter=20, disp=False, polish=False)
     return res.x, obj_func(res.x, eval_gradient=False)
 
 # Specify stationary and non-stationary kernel
