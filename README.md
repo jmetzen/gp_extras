@@ -17,11 +17,11 @@ You will need the new Gaussian process implementation from scikit-learn. For thi
     cd sklearn
     sudo python setup.py install
 
-Now, you can install `kernel_extras`
+Now, you can install `gp_extras`
 
     git clone git@github.com:jmetzen/gp_extras.git
-    cd gp_extras/gp_extras
-    sudo python setup.py install
+    cd gp_extras
+    [sudo] python setup.py install
 
 Examples
 --------

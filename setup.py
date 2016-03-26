@@ -32,14 +32,15 @@ class CleanCommand(Clean):
 
 def configuration(parent_package='', top_path=None):
     from numpy.distutils.misc_util import Configuration
-    config = Configuration("gp_extras", parent_package, top_path)
+    config = Configuration("", parent_package, top_path)
 
     config.set_options(ignore_setup_xxx_py=True,
                        assume_default_configuration=True,
                        delegate_options_to_subpackages=True,
                        quiet=True)
 
-    config.add_subpackage("kernels")
+    config.add_subpackage("gp_extras")
+    config.add_subpackage("gp_extras.kernels")
     return config
 
 
