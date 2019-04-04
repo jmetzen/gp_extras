@@ -287,6 +287,7 @@ class LocalLengthScalesKernel(Kernel):
             X_ = kmeans.fit(X).cluster_centers_
         else:
             X_ = np.asarray(X)
+            l_samples = X.shape[0]
         return cls(X_=X_, nu=nu, isotropic=isotropic, theta0=theta0,
                    thetaL=thetaL, thetaU=thetaU, l_isotropic=l_isotropic,
                    theta_l_0=theta_l_0, theta_l_L=theta_l_L, theta_l_U=theta_l_U,
