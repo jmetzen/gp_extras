@@ -96,7 +96,7 @@ class ManifoldKernel(Kernel):
 
     @theta.setter
     def theta(self, theta):
-        self.w = np.asarray(theta, dtype=np.float)
+        self.w = np.asarray(theta, dtype=float)
         self.base_kernel.theta = theta[self.theta_nn_size:]
 
     @property
@@ -298,7 +298,7 @@ class LocalLengthScalesKernel(Kernel):
 
     @theta.setter
     def theta(self, weights):
-        self.weights = np.exp(np.asarray(weights, dtype=np.float))
+        self.weights = np.exp(np.asarray(weights, dtype=float))
 
         # Parse weights into its components
         self.theta_gp, self.theta_l, self.length_scales = \
@@ -340,9 +340,9 @@ class LocalLengthScalesKernel(Kernel):
                               np.repeat(l_train, len(l_train))])  # XXX: check
 
         # Compute general Matern kernel
-        if d.ndim > 1 and self.theta_gp.size == d.ndim:
+        if d.ndim > 1 and self.theta_gp.size == d.shape[-1]:
             activation = \
-                np.sum(self.theta_gp.reshape(1, d.ndim) * d ** 2, axis=1)
+                np.sum(self.theta_gp.reshape(1, -1) * d ** 2, axis=1)
         else:
             activation = self.theta_gp[0] * np.sum(d ** 2, axis=1)
         tmp = 0.5 * (l**2).sum(1)
@@ -383,7 +383,7 @@ class LocalLengthScalesKernel(Kernel):
         length_scales : array_like
             An array containing the length-scales for the length-scale GP.
         """
-        weights = np.asarray(weights, dtype=np.float)
+        weights = np.asarray(weights, dtype=float)
 
         assert (weights.size == self.theta_size), \
             "weights does not have the expected size (expected: %d, " \
